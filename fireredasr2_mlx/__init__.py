@@ -17,6 +17,7 @@ from .features import ASRFeatExtractor
 from .tokenizer import ChineseCharEnglishSpmTokenizer
 from .models.conformer_encoder import encoder_forward
 from .models.transformer_decoder import batch_beam_search
+from .llm import FireRedAsr2LlmMlx, FireRedAsr2LlmMlxConfig
 
 
 @dataclass

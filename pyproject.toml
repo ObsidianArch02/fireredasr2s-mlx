@@ -12,6 +12,7 @@ dependencies = [
     "sentencepiece",
     "soundfile",
     "textgrid",
+    "tokenizers",
 ]
 
 [project.optional-dependencies]

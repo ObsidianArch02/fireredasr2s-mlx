@@ -16,23 +16,37 @@ different semantics**.
 
 ## A. Intentionally not ported
 
-### 1. `--asr_type llm`: FireRedASR2-LLM (8B Encoder-Adapter-LLM)
-- Upstream implementation: Conformer encoder + Adapter + Qwen2-7B-Instruct,
-  CUDA-only serving (vLLM `-tp=2 --dtype=float32` / TensorRT). **The official
-  build itself cannot run on Mac.**
-- MLX behavior: the flag is accepted, then errors out with an explanation.
-- Feasibility assessment (if ever done): the encoder part is already ported in
-  this repo; the Adapter is about 30 lines; Qwen2 is a first-class mlx-lm
-  architecture. The real blockers are not technical:
-  1. Upstream has no runnable baseline on Mac, so a "byte-identical" acceptance
-     gate is in principle impossible for this variant;
-  2. 8B autoregressive decoding would push warm RTF from AED's 0.12 back to the
-     ~1 range (noticeably slower);
-  3. bf16 weights ~15GB + encoder 4.4GB - fits on a smaller-memory machine but with no
-     headroom; quantization deviates further (with no baseline to measure the
-     deviation against).
-- Upstream benefit for reference: average CER on 4 Mandarin benchmarks,
-  LLM 2.89% vs AED 3.05% (bigger gap on dialect sets).
+### 1. ~~`--asr_type llm`: FireRedASR2-LLM~~ (ported 2026-09-27)
+
+FireRedASR2-LLM (Conformer encoder + Adapter + Qwen2-7B-Instruct + LoRA) is now
+fully ported to MLX: `--asr_type llm --asr_model_dir pretrained_models/FireRedASR2-LLM`
+runs directly (fp32, Metal GPU, zero torch). Implementation notes:
+
+- **Qwen2 decoder**: hand-written MLX forward (eager attention, KV cache, RoPE,
+  RMSNorm, SwiGLU) matching transformers 5.x numerics; the checkpoint's LoRA
+  weights (r=64, alpha=16, target q/k/v/o/gate/up/down) are pre-merged into the
+  base weights at load time.
+- **beam search**: line-for-line translation of transformers 5.17 `_beam_search`
+  (do_sample=False, single eos, length_penalty, early-stop heuristic, KV cache
+  beam reordering).
+- **Acceptance method**: upstream has no runnable baseline on Mac, so a golden
+  baseline was self-generated on this machine (a larger-memory machine) with the official PyTorch
+  code at CPU fp32 (`scripts/dump_golden_llm.py` -> `golden/golden_llm.npz`).
+  MLX **CPU** fp32 is token-for-token identical (3/3 samples, ids + text,
+  encoder forward max-abs-diff 2e-6; see `tests/test_llm_parity.py`).
+- **Known boundary**: Metal fp32 matmul carries ~1e-2 noise vs CPU fp32; the two
+  short utterances match upstream verbatim on GPU, but the `event` sample is a
+  degenerate repeated sequence (upstream itself outputs "happy birthday" x30)
+  whose near-tied beam scores may be perturbed into stopping early (the token
+  sequences still match). Exact parity tests are therefore pinned to CPU; GPU
+  behavior is locked by a smoke test.
+- **Two intentional deviations** (the official 4-module CLI's LLM path crashes
+  itself, so there is no "official behavior" to match):
+  1. LLM results carry `confidence` (mean per-token probability of the best
+     hypothesis) - upstream results lack this field and would hit a KeyError
+     when assembling sentences;
+  2. Assembly is forced through the no-timestamp branch (the LLM has no
+     word-level timestamps anyway).
 
 ### 2. External LM shallow fusion (`--elm_dir` / `--elm_weight`, LstmLm)
 - The official AED beam search can fuse the log-prob of an LSTM external LM
@@ -93,3 +107,6 @@ different semantics**.
 ## Changelog
 
 - 2026-09-27: first version. Reflects the 4-module AED system state after `3b48b98`.
+- 2026-09-27: `--asr_type llm` port finished (CPU fp32 golden self-generated on a
+  larger-memory machine; MLX CPU identical / GPU smoke-pinned); removed from "not ported"
+  and documented here.

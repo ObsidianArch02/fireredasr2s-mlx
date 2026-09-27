@@ -113,3 +113,19 @@ accepted.
 2. Zero torch import (`import torch` must fail in an env with only `fireredasr2_mlx` deps)
 3. RTF <= 0.15 (Apple Silicon GPU)
 4. pytest all green (8 unit parity tests + 2 e2e)
+
+## 5. Addendum (2026-09-27)
+
+**The FireRedASR2-LLM variant (`--asr_type llm`) is now ported.** It was skipped
+back then because a smaller-memory machine could not self-generate a golden baseline; on a
+larger-memory machine the official PyTorch code (CPU fp32, transformers 5.17) produced
+`golden/golden_llm.npz` (script `scripts/dump_golden_llm.py`), and MLX CPU fp32 is
+token-for-token identical to it (encoder max-abs-diff 2e-6, beam search ids/texts
+3/3 identical, `tests/test_llm_parity.py` 17 items). Implementation: hand-written
+Qwen2 forward (KV cache + line-for-line translation of transformers 5.x
+`_beam_search`), checkpoint LoRA weights pre-merged at load, Adapter port, and the
+`tokenizers` library replacing the HF tokenizer (zero torch/transformers at
+runtime). Metal fp32 matmul ~1e-2 noise affects beam near-tie outcomes on
+degenerate repeated sequences (the `event` sample may stop early on GPU); exact
+parity tests are pinned to CPU. See docs/PARITY_GAPS.md and README
+"FireRedASR2-LLM variant".

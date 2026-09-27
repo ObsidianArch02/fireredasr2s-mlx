@@ -12,12 +12,12 @@ import glob
 import json
 import logging
 import os
-import sys
 
 import soundfile as sf
 from textgrid import IntervalTier, TextGrid
 
 from . import FireRedAsr2MlxConfig
+from .llm import FireRedAsr2LlmMlxConfig
 from .models.lid import FireRedLidMlxConfig
 from .models.vad import FireRedVadMlxConfig
 from .punc.punc_mlx import FireRedPuncMlxConfig
@@ -95,17 +95,14 @@ punc_g.add_argument("--punc_sentence_max_length", type=int, default=-1)
 
 
 def main(args):
-    if args.asr_type == "llm":
-        logger.error(
-            "--asr_type llm is not supported by the MLX port: the LLM decoder "
-            "(FireRedASR2-LLM, Qwen2-7B) is CUDA-only (torch + transformers) "
-            "and cannot run on Mac. Please use --asr_type aed (default).")
-        sys.exit(1)
     if args.elm_dir:
         logger.warning(
             f"External LM is not supported by the MLX port, ignoring "
             f"--elm_dir {args.elm_dir} --elm_weight {args.elm_weight} "
             f"(AED decoding runs without the external LM).")
+    if args.asr_type == "llm" and args.return_timestamp:
+        logger.info("--asr_type llm: the LLM variant has no word timestamps, "
+                    "--return_timestamp has no effect.")
     # MLX runs on Metal/CPU; --asr_use_gpu/--asr_use_half/--vad_use_gpu/
     # --lid_use_gpu/--punc_use_gpu are accepted for CLI compatibility only.
 
@@ -131,6 +128,8 @@ def main(args):
         aed_length_penalty=args.aed_length_penalty,
         eos_penalty=args.eos_penalty,
         return_timestamp=bool(args.return_timestamp))
+    llm_config = FireRedAsr2LlmMlxConfig(
+        beam_size=args.beam_size, decode_max_len=args.decode_max_len)
     punc_config = FireRedPuncMlxConfig(
         sentence_max_length=args.punc_sentence_max_length,
         punc_with_timestamp=args.punc_with_timestamp)
@@ -138,7 +137,9 @@ def main(args):
     system_config = FireRedAsr2SystemMlxConfig(
         vad_model_dir=args.vad_model_dir, lid_model_dir=args.lid_model_dir,
         asr_model_dir=args.asr_model_dir, punc_model_dir=args.punc_model_dir,
+        asr_type=args.asr_type,
         vad_config=vad_config, lid_config=lid_config, asr_config=asr_config,
+        llm_config=llm_config,
         punc_config=punc_config, asr_batch_size=args.asr_batch_size,
         punc_batch_size=args.punc_batch_size, enable_vad=args.enable_vad,
         enable_lid=args.enable_lid, enable_punc=args.enable_punc)

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import soundfile as sf
 
 from . import FireRedAsr2Mlx, FireRedAsr2MlxConfig
+from .llm import FireRedAsr2LlmMlx, FireRedAsr2LlmMlxConfig
 from .models.lid import FireRedLidMlx, FireRedLidMlxConfig
 from .models.vad import FireRedVadMlx, FireRedVadMlxConfig
 from .punc.punc_mlx import FireRedPuncMlx, FireRedPuncMlxConfig
@@ -26,9 +27,11 @@ class FireRedAsr2SystemMlxConfig:
     lid_model_dir: str = "pretrained_models/FireRedLID"
     asr_model_dir: str = "pretrained_models/FireRedASR2-AED"
     punc_model_dir: str = "pretrained_models/FireRedPunc"
+    asr_type: str = "aed"
     vad_config: FireRedVadMlxConfig = field(default_factory=FireRedVadMlxConfig)
     lid_config: FireRedLidMlxConfig = field(default_factory=FireRedLidMlxConfig)
     asr_config: FireRedAsr2MlxConfig = field(default_factory=FireRedAsr2MlxConfig)
+    llm_config: FireRedAsr2LlmMlxConfig = field(default_factory=FireRedAsr2LlmMlxConfig)
     punc_config: FireRedPuncMlxConfig = field(default_factory=FireRedPuncMlxConfig)
     asr_batch_size: int = 1
     punc_batch_size: int = 1
@@ -40,11 +43,21 @@ class FireRedAsr2SystemMlxConfig:
 class FireRedAsr2SystemMlx:
     def __init__(self, config: FireRedAsr2SystemMlxConfig):
         c = config
+        if c.asr_type == "llm":
+            # The LLM variant has no word timestamps; force the no-timestamp
+            # assembly path (the official 4-module CLI crashes here instead).
+            c.asr_config.return_timestamp = False
+        self.asr_type = c.asr_type
         self.vad = FireRedVadMlx.from_pretrained(c.vad_model_dir, c.vad_config) \
             if c.enable_vad else None
         self.lid = FireRedLidMlx.from_pretrained(c.lid_model_dir, c.lid_config) \
             if c.enable_lid else None
-        self.asr = FireRedAsr2Mlx.from_pretrained(c.asr_model_dir, c.asr_config)
+        if c.asr_type == "llm":
+            self.asr = FireRedAsr2LlmMlx.from_pretrained(c.asr_model_dir,
+                                                         c.llm_config)
+        else:
+            self.asr = FireRedAsr2Mlx.from_pretrained(c.asr_model_dir,
+                                                      c.asr_config)
         self.punc = FireRedPuncMlx.from_pretrained(c.punc_model_dir, c.punc_config) \
             if c.enable_punc else None
         self.config = config

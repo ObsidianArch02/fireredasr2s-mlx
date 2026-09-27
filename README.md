@@ -21,7 +21,7 @@ cd fireredasr2s-mlx
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python \
     mlx numpy soundfile textgrid sentencepiece \
-    kaldi-native-fbank kaldiio safetensors
+    kaldi-native-fbank kaldiio safetensors tokenizers
 ```
 
 > `torch` is imported on demand only for the one-time checkpoint conversion
@@ -70,14 +70,48 @@ Pipeline: `wav -> VAD segmentation -> per-segment ASR (+LID) -> Punc -> result.j
 # 3) directory batch + scp list, disable outputs you do not need
 .venv/bin/python -m fireredasr2_mlx.cli --wav_dir golden/wavs --outdir output
 .venv/bin/python -m fireredasr2_mlx.cli --wav_scp wavs.scp --write_textgrid 0 --write_srt 0 --outdir output
+
+# 4) FireRedASR2-LLM variant (Qwen2-7B decoder; download weights and run the one-time
+#    conversion first, see next section)
+.venv/bin/python -m fireredasr2_mlx.cli \
+    --wav_path golden/wavs/hello_zh.wav --outdir output \
+    --asr_type llm --asr_model_dir pretrained_models/FireRedASR2-LLM
 ```
+
+## FireRedASR2-LLM variant (--asr_type llm)
+
+Besides the default AED path, the four-module system supports the official LLM
+variant (Conformer + Adapter + Qwen2-7B-Instruct, LoRA weights shipped in the
+checkpoint). Setup:
+
+```bash
+# 1) download weights (~19GB, includes Qwen2-7B-Instruct bf16 shards and model.pth.tar)
+.venv/bin/python -c "from huggingface_hub import snapshot_download; \
+    snapshot_download('FireRedTeam/FireRedASR2-LLM', \
+    local_dir='pretrained_models/FireRedASR2-LLM')"
+
+# 2) one-time conversion (needs a torch env; splits encoder/adapter+LoRA into safetensors)
+.venv/bin/python -c "from fireredasr2_mlx.loader import convert_llm_checkpoint; \
+    convert_llm_checkpoint('pretrained_models/FireRedASR2-LLM/model.pth.tar', \
+    'pretrained_models/FireRedASR2-LLM')"
+```
+
+Then run example 4. The LLM variant has no word-level timestamps
+(`--return_timestamp` is a no-op) and results carry an extra `confidence` field
+(mean per-token probability). On official benchmarks the LLM's average CER is
+slightly better than AED (about 2.89% vs 3.05% on 4 Mandarin sets). Numerical
+acceptance details and bounds are in [docs/PARITY_GAPS.md](docs/PARITY_GAPS.md).
 
 ## Known boundaries
 
-- **`--asr_type llm` unsupported**: FireRedASR2-LLM (Qwen2-7B decoder) is
-  CUDA-only (torch + transformers) and cannot run on Mac/MLX upstream either.
-  Choosing `llm` prints an explanation and exits; the default `--asr_type aed`
-  is the complete four-module system implemented by this port.
+- **`--asr_type llm` (FireRedASR2-LLM, Qwen2-7B decoder) is supported**: the same
+  four-module pipeline as AED, with a flag surface matching upstream
+  (`--beam_size`/`--decode_max_len` etc. are shared flags). LLM has no word-level
+  timestamps; `--return_timestamp` is a no-op; results carry `confidence` (mean
+  per-token probability). Weights need the one-time conversion after download (see
+  above). Exact parity (token-for-token equal to official PyTorch CPU fp32) holds on
+  CPU; Metal fp32 matmul noise of ~1e-2 may change beam near-tie outcomes on
+  degenerate repeated sequences (see [docs/PARITY_GAPS.md](docs/PARITY_GAPS.md)).
 - **External LM (`--elm_dir/--elm_weight`) unsupported**: the flags are accepted,
   print a notice, and are ignored; decoding continues as AED without an external LM.
 - `--sort_wav_by_dur 1` orders processing by actual audio duration, longest first
