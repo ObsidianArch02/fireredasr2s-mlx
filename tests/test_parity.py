@@ -277,12 +277,18 @@ def test_decoder_kv_cache_deterministic_across_runs():
 
 @pytest.fixture(scope="module")
 def mlx_cli_run(tmp_path_factory):
-    """Run the full MLX CLI once on the 3 golden wavs (module-scoped)."""
+    """Run the full MLX CLI once on the 3 golden wavs (module-scoped).
+
+    Pinned to CPU: the golden files are PyTorch-CPU outputs, and Metal fp32
+    matmul noise (~1e-2) can flip near-tied AED beams on hard inputs (the
+    event song clip), breaking byte-level parity that is exact on CPU."""
+    import os
     outdir = tmp_path_factory.mktemp("output_mlx")
     cmd = [sys.executable, "-m", "fireredasr2_mlx.cli",
            "--wav_paths", *GOLDEN_WAVS, "--outdir", str(outdir)]
+    env = dict(os.environ, FIREREDASR2_MLX_DEVICE="cpu")
     proc = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True,
-                          text=True)
+                          text=True, env=env)
     return proc, outdir
 
 

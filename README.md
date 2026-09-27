@@ -1,16 +1,12 @@
 # FireRedASR2S - MLX Port
 
 A **pure MLX port** of Xiaohongshu's [FireRedASR2S](https://github.com/FireRedTeam/FireRedASR2S),
-the SOTA four-module Chinese-English mixed ASR system, targeting Apple Silicon
-(Metal GPU) with zero torch dependency at runtime.
+the SOTA four-module Chinese-English mixed ASR system, targeting Apple Silicon (Metal GPU)
+with zero torch dependency at runtime.
 
-- The official PyTorch reference implementation is kept read-only at
-  [FireRedASR2S-main/](https://github.com/FireRedTeam/FireRedASR2S) (unmodified).
-- The CLI surface matches the official `fireredasr2s_cli.py` **flag for flag**:
-  swap the official command line for this one and it just runs.
-- Field-level parity on 3 test wavs: all `result.jsonl` fields, TextGrid, and SRT
-  match the official PyTorch output (golden outputs in
-  [output_torch/](./golden/output_torch)).
+- The official PyTorch reference implementation is kept read-only at [FireRedASR2S-main/](https://github.com/FireRedTeam/FireRedASR2S) (unmodified).
+- The CLI surface matches the official `fireredasr2s_cli.py` **flag for flag**: swap the official command line for this one and it just runs.
+- Field-level parity on 3 test wavs: all `result.jsonl` fields, TextGrid, and SRT match the official PyTorch output (golden outputs in [output_torch/](./golden/output_torch)).
 
 ## Install (uv)
 
@@ -48,12 +44,16 @@ Pipeline: `wav -> VAD segmentation -> per-segment ASR (+LID) -> Punc -> result.j
 
 - **Flag-compatible**: the names, semantics, defaults, and choices of all 43 flags
   match the official `fireredasr2s_cli.py` exactly (verified by script).
-- **Identical output**: for the same input, `result.jsonl`, `asr_tg/*.TextGrid`,
-  and `asr_srt/*.srt` match the official PyTorch build field for field.
+- **Identical output**: for the same input, `result.jsonl`, `asr_tg/*.TextGrid`, and
+  `asr_srt/*.srt` match the official PyTorch build field for field.
 - **Different backend**: the official build is PyTorch (CUDA/CPU); this one is MLX
   (Metal/CPU). Therefore `--asr_use_gpu/--asr_use_half/--vad_use_gpu/--lid_use_gpu/--punc_use_gpu`
   are accepted and ignored - MLX always runs on Metal (`use_gpu=0` needs no CPU
   fallback path; numeric results are unchanged).
+  - Exception: Metal fp32 matmul carries ~1e-2 noise relative to CPU, which can flip
+    near-tied beams on hard samples (the event song segment); to reproduce the
+    official golden byte-for-byte, set `FIREREDASR2_MLX_DEVICE=cpu` (this is how the
+    golden tests run; CPU is field-identical).
 
 ## Usage examples
 

@@ -13,6 +13,7 @@ import json
 import logging
 import os
 
+import mlx.core as mx
 import soundfile as sf
 from textgrid import IntervalTier, TextGrid
 
@@ -263,6 +264,15 @@ def split_and_save_segment(wav_path, timestamps_ms, save_segment_dir):
 
 def cli_main():
     args = parser.parse_args()
+    # Internal knob for the golden-parity tests: Metal fp32 matmul carries
+    # ~1e-2 noise vs CPU fp32, which can flip near-tied beams on hard inputs.
+    # The byte-parity gate therefore pins the subprocess to CPU.
+    device = os.environ.get("FIREREDASR2_MLX_DEVICE", "").lower()
+    if device:
+        if device not in ("cpu", "gpu"):
+            raise ValueError(f"FIREREDASR2_MLX_DEVICE must be cpu|gpu, "
+                             f"got {device!r}")
+        mx.set_default_device(mx.cpu if device == "cpu" else mx.gpu)
     logger.info(args)
     main(args)
 

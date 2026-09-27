@@ -118,3 +118,10 @@ runs directly (fp32, Metal GPU, zero torch). Implementation notes:
   header length cap and shard path allowlist; LLM facade gained upstream-style
   per-utterance exception fallback; ultra-short-audio guard; system no longer
   mutates the caller's config.
+- 2026-09-27: root cause found for the AED golden test failures on this machine -
+  the official PyTorch CPU golden is byte-stable across machines (a fresh run
+  matched the committed `golden/output_torch`), and all drift comes from MLX GPU
+  fp32 matmul noise flipping near-tied beams on the event sample; MLX CPU output
+  is byte-identical to the golden (including TextGrid/SRT). Fix: the golden tests
+  are pinned to CPU via the internal env var `FIREREDASR2_MLX_DEVICE=cpu` (CLI
+  default is still GPU); full suite 24/24 green.
