@@ -1,0 +1,26 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+build/
+dist/
+
+# --- Model weights and download cache (large; see README "Model download" to fetch) ---
+pretrained_models/
+*.pth.tar
+*.safetensors
+*.bin
+chunks_*/
+main.tar.gz
+
+# --- Run outputs (golden baselines live in golden/ and are versioned) ---
+output/
+output_*/
+
+# --- Session/tool artifacts ---
+.zcode/
+
+# --- System ---
+.DS_Store

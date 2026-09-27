@@ -1,0 +1,26 @@
+[project]
+name = "fireredasr2s-mlx"
+version = "0.1.0"
+description = "FireRedASR2S (VAD+LID+ASR+Punc) four-module ASR system, native Apple Silicon MLX port with byte-identical CLI parity to the official PyTorch build"
+requires-python = ">=3.12"
+dependencies = [
+    "mlx>=0.32",
+    "safetensors",
+    "numpy>=1.26,<2",
+    "kaldiio",
+    "kaldi_native_fbank",
+    "sentencepiece",
+    "soundfile",
+    "textgrid",
+]
+
+[project.optional-dependencies]
+# Needed only by the conversion scripts and the official parity run (runtime is torch-free)
+convert = ["torch", "transformers"]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: end-to-end golden parity (full four-module CLI run, minutes)",
+]
