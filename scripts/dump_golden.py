@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-REPO = ROOT / "FireRedASR2S-main"
+REPO = ROOT / "golden" / "wavs"
 sys.path.insert(0, str(REPO))
 
 import torch  # noqa: E402

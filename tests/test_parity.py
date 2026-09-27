@@ -40,9 +40,9 @@ GOLDEN_DIR = PROJECT_ROOT / "golden" / "output_torch"
 # Sorted order == the order the CLI produces (sorted wav_paths), and the
 # order of the records inside output_torch/result.jsonl.
 GOLDEN_WAVS = [
-    "third_party/FireRedASR2S-main/assets/event.wav",
-    "third_party/FireRedASR2S-main/assets/hello_en.wav",
-    "third_party/FireRedASR2S-main/assets/hello_zh.wav",
+    "golden/wavs/event.wav",
+    "golden/wavs/hello_en.wav",
+    "golden/wavs/hello_zh.wav",
 ]
 
 

@@ -1,11 +1,11 @@
 # FireRedASR2S - MLX Port
 
-A **pure MLX port** of Xiaohongshu's [FireRedASR2S](./third_party/FireRedASR2S-main),
+A **pure MLX port** of Xiaohongshu's [FireRedASR2S](https://github.com/FireRedTeam/FireRedASR2S),
 the SOTA four-module Chinese-English mixed ASR system, targeting Apple Silicon
 (Metal GPU) with zero torch dependency at runtime.
 
 - The official PyTorch reference implementation is kept read-only at
-  [FireRedASR2S-main/](./third_party/FireRedASR2S-main) (unmodified).
+  [FireRedASR2S-main/](https://github.com/FireRedTeam/FireRedASR2S) (unmodified).
 - The CLI surface matches the official `fireredasr2s_cli.py` **flag for flag**:
   swap the official command line for this one and it just runs.
 - Field-level parity on 3 test wavs: all `result.jsonl` fields, TextGrid, and SRT
@@ -47,8 +47,7 @@ Pipeline: `wav -> VAD segmentation -> per-segment ASR (+LID) -> Punc -> result.j
 ## Relationship to the official CLI
 
 - **Flag-compatible**: the names, semantics, defaults, and choices of all 43 flags
-  match `third_party/FireRedASR2S-main/fireredasr2s/fireredasr2s_cli.py` exactly
-  (verified by script).
+  match the official `fireredasr2s_cli.py` exactly (verified by script).
 - **Identical output**: for the same input, `result.jsonl`, `asr_tg/*.TextGrid`,
   and `asr_srt/*.srt` match the official PyTorch build field for field.
 - **Different backend**: the official build is PyTorch (CUDA/CPU); this one is MLX
@@ -61,15 +60,15 @@ Pipeline: `wav -> VAD segmentation -> per-segment ASR (+LID) -> Punc -> result.j
 ```bash
 # 1) single wav -> output/ (result.jsonl + TextGrid + SRT)
 .venv/bin/python -m fireredasr2_mlx.cli \
-    --wav_path third_party/FireRedASR2S-main/assets/hello_zh.wav --outdir output
+    --wav_path golden/wavs/hello_zh.wav --outdir output
 
 # 2) multiple wavs + save VAD segment wavs (--sort_wav_by_dur 1 processes longest first)
 .venv/bin/python -m fireredasr2_mlx.cli \
-    --wav_paths third_party/FireRedASR2S-main/assets/hello_zh.wav third_party/FireRedASR2S-main/assets/hello_en.wav third_party/FireRedASR2S-main/assets/event.wav \
+    --wav_paths golden/wavs/hello_zh.wav golden/wavs/hello_en.wav golden/wavs/event.wav \
     --sort_wav_by_dur 1 --save_segment 1 --outdir output
 
 # 3) directory batch + scp list, disable outputs you do not need
-.venv/bin/python -m fireredasr2_mlx.cli --wav_dir third_party/FireRedASR2S-main/assets --outdir output
+.venv/bin/python -m fireredasr2_mlx.cli --wav_dir golden/wavs --outdir output
 .venv/bin/python -m fireredasr2_mlx.cli --wav_scp wavs.scp --write_textgrid 0 --write_srt 0 --outdir output
 ```
 
@@ -88,3 +87,27 @@ Pipeline: `wav -> VAD segmentation -> per-segment ASR (+LID) -> Punc -> result.j
 - `--punc_with_timestamp 0` forces punctuation through the no-timestamp branch
   (one sentence for the whole segment); the official 4-module system parses but
   never wires this flag - this port implements it.
+
+## Parity against the official implementation
+
+This repo does not ship the official code. To run field-level parity against the
+official PyTorch build, clone the upstream repo separately:
+
+```bash
+git clone https://github.com/FireRedTeam/FireRedASR2S.git ../FireRedASR2S-main
+```
+
+`scripts/run_official_cli.py` looks for the official checkout in the directory
+above this repo by default; set `FIRERED_OFFICIAL_DIR` to point anywhere else.
+Keep the weights layout in `pretrained_models/` (the official CLI's default model
+paths match it).
+
+```bash
+.venv/bin/python scripts/run_official_cli.py \
+    --wav_paths golden/wavs/hello_zh.wav golden/wavs/hello_en.wav golden/wavs/event.wav \
+    --outdir /tmp/golden_torch --asr_use_gpu 0 --vad_use_gpu 0 --lid_use_gpu 0 --punc_use_gpu 0
+.venv/bin/python scripts/fireredasr2s_mlx_cli.py \
+    --wav_paths golden/wavs/hello_zh.wav golden/wavs/hello_en.wav golden/wavs/event.wav \
+    --outdir /tmp/golden_mlx
+.venv/bin/python tests/acceptance_check.py /tmp/golden_torch/result.jsonl /tmp/golden_mlx/result.jsonl
+```

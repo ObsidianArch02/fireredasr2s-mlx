@@ -13,7 +13,12 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # repo root (script lives in scripts/)
-OFFICIAL_REPO = os.path.join(ROOT, "third_party", "FireRedASR2S-main")
+# The official implementation is not shipped with this repo: point
+# FIRERED_OFFICIAL_DIR at any local checkout of FireRedTeam/FireRedASR2S
+# (defaults to the directory above this repo).
+OFFICIAL_REPO = os.environ.get(
+    "FIRERED_OFFICIAL_DIR",
+    os.path.join(ROOT, "..", "FireRedASR2S-main"))
 
 # `import fireredasr2s.*` resolves against the read-only official checkout.
 sys.path.insert(0, OFFICIAL_REPO)

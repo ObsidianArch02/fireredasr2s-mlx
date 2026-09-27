@@ -6,7 +6,6 @@ class with 6 layers over a 120-language vocabulary (decode_max_len=2).
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,9 +15,6 @@ from ..features import ASRFeatExtractor
 from ..loader import load_safetensors_plain
 from .conformer_encoder import encoder_forward
 from .transformer_decoder import batch_beam_search
-
-_REPO = (Path(__file__).resolve().parent.parent.parent / "third_party"
-         / "FireRedASR2S-main")
 
 
 @dataclass
@@ -39,9 +35,7 @@ class FireRedLidMlx:
         if "encoder.positional_encoding.pe" in w:
             pass  # loader handles PE buffers
         feat_extractor = ASRFeatExtractor(str(model_dir / "cmvn.ark"))
-        if str(_REPO) not in sys.path:
-            sys.path.insert(0, str(_REPO))
-        from fireredasr2s.fireredasr2.data.token_dict import TokenDict
+        from ..token_dict import TokenDict
         dict_ = TokenDict(str(model_dir / "dict.txt"), unk="<unk>")
         return cls(w, args, feat_extractor, dict_, config)
 
