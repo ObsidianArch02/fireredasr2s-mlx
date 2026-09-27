@@ -21,7 +21,11 @@ from .models.conformer_encoder import abs_positional_encoding, build_rel_pe
 
 def convert_checkpoint(pth_path: str, out_dir: str):
     """ONE-TIME conversion, must run inside the PyTorch venv (imports torch).
-    Writes <out_dir>/model.safetensors + <out_dir>/args.json."""
+    Writes <out_dir>/model.safetensors + <out_dir>/args.json.
+
+    SECURITY: uses torch.load(weights_only=False) — only convert checkpoints
+    from trusted, integrity-verified sources; untrusted .pth.tar files can
+    execute arbitrary code on load."""
     import json
     import torch  # heavyweight import, conversion-only
     from safetensors.torch import save_file
@@ -98,6 +102,11 @@ LORA_SCALING = 16.0 / 64.0
 def convert_llm_checkpoint(pth_path: str, out_dir: str):
     """ONE-TIME conversion for FireRedASR2-LLM, run in the PyTorch venv.
 
+    SECURITY: uses torch.load(weights_only=False) — only convert checkpoints
+    from the official FireRedTeam HuggingFace repo (or otherwise trusted,
+    integrity-verified sources); untrusted .pth.tar files can execute
+    arbitrary code on load.
+
     Splits model.pth.tar into:
       encoder.safetensors  — encoder.* (conv layout fixed, fp32)
       adapter.safetensors  — encoder_projector.* + LoRA weights (fp32)
@@ -151,6 +160,12 @@ def _load_safetensors_shard(path):
 
     with open(path, "rb") as f:
         header_len = struct.unpack("<Q", f.read(8))[0]
+        f.seek(0, 2)
+        file_size = f.tell()
+        f.seek(8)
+        if not (0 < header_len <= min(file_size - 8, 100_000_000)):
+            raise ValueError(f"bad safetensors header length {header_len} "
+                             f"in {path}")
         header = json.loads(f.read(header_len))
         data = f.read()
     out = {}
@@ -210,6 +225,9 @@ def load_llm_weights(model_dir: str):
     w_llm = {}
     index = json.loads((qwen_dir / "model.safetensors.index.json").read_text())
     for shard in sorted(set(index["weight_map"].values())):
+        # shard names come from a JSON file; constrain to plain basenames
+        if Path(shard).name != shard:
+            raise ValueError(f"unsafe shard name in index: {shard!r}")
         w_llm.update(_load_safetensors_shard(str(qwen_dir / shard)))
 
     adapter = load_file(str(model_dir / "adapter.safetensors"))

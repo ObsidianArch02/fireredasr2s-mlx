@@ -43,11 +43,12 @@ class FireRedAsr2SystemMlxConfig:
 class FireRedAsr2SystemMlx:
     def __init__(self, config: FireRedAsr2SystemMlxConfig):
         c = config
-        if c.asr_type == "llm":
-            # The LLM variant has no word timestamps; force the no-timestamp
-            # assembly path (the official 4-module CLI crashes here instead).
-            c.asr_config.return_timestamp = False
         self.asr_type = c.asr_type
+        # The LLM variant has no word timestamps; force the no-timestamp
+        # assembly path without mutating the caller's config (the official
+        # 4-module CLI crashes here instead).
+        self.return_timestamp = c.asr_config.return_timestamp \
+            and c.asr_type != "llm"
         self.vad = FireRedVadMlx.from_pretrained(c.vad_model_dir, c.vad_config) \
             if c.enable_vad else None
         self.lid = FireRedLidMlx.from_pretrained(c.lid_model_dir, c.lid_config) \
@@ -108,7 +109,7 @@ class FireRedAsr2SystemMlx:
         # 4-5. Punc
         # Timestamped punc needs both ASR word timestamps and
         # --punc_with_timestamp 1; otherwise fall back to plain-text punc.
-        with_ts = bool(self.config.asr_config.return_timestamp) and \
+        with_ts = bool(self.return_timestamp) and \
             bool(self.config.punc_config.punc_with_timestamp)
         if self.config.enable_punc:
             punc_results = []
@@ -116,7 +117,7 @@ class FireRedAsr2SystemMlx:
             for j, asr_result in enumerate(asr_results):
                 batch_asr_text.append(asr_result["text"])
                 batch_asr_uttid.append(asr_result["uttid"])
-                if self.config.asr_config.return_timestamp:
+                if self.return_timestamp:
                     batch_asr_timestamp.append(asr_result.get("timestamp", []))
                 elif "timestamp" in asr_result:
                     batch_asr_timestamp.append(asr_result["timestamp"])

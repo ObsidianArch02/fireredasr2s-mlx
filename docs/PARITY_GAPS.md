@@ -110,3 +110,11 @@ runs directly (fp32, Metal GPU, zero torch). Implementation notes:
 - 2026-09-27: `--asr_type llm` port finished (CPU fp32 golden self-generated on a
   larger-memory machine; MLX CPU identical / GPU smoke-pinned); removed from "not ported"
   and documented here.
+- 2026-09-27: fixes after a three-pass audit (official parity / idempotency /
+  security): beam search early-stop semantics aligned line-for-line with
+  transformers 5.17 `_check_early_stop_heuristic` (min over ALL finished slots);
+  merge aligned with the official forced `speech_lens=None` semantics;
+  repetition_penalty applied per beam; hand-rolled safetensors reader gained a
+  header length cap and shard path allowlist; LLM facade gained upstream-style
+  per-utterance exception fallback; ultra-short-audio guard; system no longer
+  mutates the caller's config.

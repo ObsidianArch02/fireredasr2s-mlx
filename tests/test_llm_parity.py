@@ -208,6 +208,8 @@ def test_llm_decode_gpu_smoke():
     """GPU fp32: zh/en exact; event may stop early in its degenerate
     repetition loop (near-tie beam flips from ~1e-2 matmul noise), but the
     token set must be the official one."""
+    if not mx.metal.is_available():
+        pytest.skip("no Metal GPU")
     mx.set_default_device(mx.gpu)
     m = get_model()
     z, texts = golden()

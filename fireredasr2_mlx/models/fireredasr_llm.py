@@ -32,7 +32,9 @@ def merge_input_ids_with_speech_features(
     inputs_embeds:   (1, U, D) text embeddings.
     input_ids:       (1, U) int array, exactly one speech token.
     attention_mask:  (1, U)
-    speech_lens:     (1,) valid speech frames per utterance.
+    speech_lens:     (1,) valid speech frames per utterance; ignored, exactly
+                     as in the official merge (which forces speech_lens=None
+                     at entry).
     Returns (final_embedding (1, M, D), final_attention_mask (1, M)).
     """
     ids = np.asarray(input_ids)
@@ -40,7 +42,8 @@ def merge_input_ids_with_speech_features(
     embs = np.asarray(inputs_embeds)
     sf = np.asarray(speech_features)
     B, U = ids.shape
-    assert B == 1, "MLX port processes one utterance at a time"
+    if B != 1:
+        raise ValueError("MLX port processes one utterance at a time")
 
     _, speech_len, embed_dim = sf.shape
     special_mask = ids == speech_token_id                     # (1, U)
@@ -69,17 +72,14 @@ def merge_input_ids_with_speech_features(
     speech_to_overwrite[batch_indices, text_to_overwrite] = False
     speech_to_overwrite &= \
         speech_to_overwrite.cumsum(-1) - 1 >= nb_speech_pad[:, None]
-    speech_cumsum = speech_to_overwrite.astype(np.int64).cumsum(-1)
-    speech_position_counter = np.where(speech_to_overwrite,
-                                       speech_cumsum - 1, 0)
-    sl = np.asarray(speech_lens).astype(np.int64)
-    valid = speech_position_counter < sl[:, None]
-    speech_to_overwrite &= valid
-    assert speech_to_overwrite.sum() == int(sl.sum()), \
-        "speech_lens and speech token distribution mismatch"
-    bidx, sidx = np.where(speech_to_overwrite)
-    sfeat_idx = speech_position_counter[speech_to_overwrite]
-    final_embedding[bidx, sidx] = sf[bidx, sfeat_idx]
+    # The official merge forces speech_lens=None at entry, i.e. it always
+    # takes the else branch: ALL padded speech frames are written into the
+    # merged embedding and marked attended. (For batch=1 utterances the
+    # padded adapter output length equals the valid length, so the branches
+    # coincide; the official semantics are kept regardless.)
+    if int(speech_to_overwrite.sum()) != sf.shape[0] * sf.shape[1]:
+        raise ValueError("speech token distribution mismatch")
+    final_embedding[speech_to_overwrite] = sf.reshape(-1, embed_dim)
     final_attention_mask[speech_to_overwrite] = 1
 
     # mask out padding positions (none for B=1 decode prompts, kept verbatim)
@@ -108,7 +108,8 @@ def beam_search(w: dict, prompt_embeds, cfg: dict, max_new_tokens: int,
     do_sample=False, single eos id, early_stopping=False).
 
     prompt_embeds: (1, S, D) merged speech+text embeddings.
-    Returns (token_ids (L,),) — the best finished hypothesis, eos excluded.
+    Returns (token_ids (L,),) — the best hypothesis; a trailing eos is kept
+    (as in HF generate; the decode side strips it via skip_special_tokens).
     """
     B = num_beams
     K = max(2, 2) * B               # single eos -> (1 + 1) * num_beams
@@ -147,9 +148,11 @@ def beam_search(w: dict, prompt_embeds, cfg: dict, max_new_tokens: int,
         log_probs = logits - mx.logsumexp(logits, axis=-1, keepdims=True)
 
         # b. logits processors (transformers 5.x applies them to log-probs,
-        #    per beam over that beam's own generated tokens)
+        #    per beam over that beam's own generated tokens). np.array makes
+        #    an explicit copy: np.asarray of an mx array is a writable
+        #    zero-copy view and would mutate the shared buffer.
         if repetition_penalty != 1.0 and cur_len > 0:
-            lp = np.asarray(log_probs)
+            lp = np.array(log_probs)
             for b in range(B):
                 seen = np.unique(running_sequences[b, :cur_len])
                 lp[b, seen] = np.where(lp[b, seen] < 0,
@@ -157,7 +160,7 @@ def beam_search(w: dict, prompt_embeds, cfg: dict, max_new_tokens: int,
                                        lp[b, seen] / repetition_penalty)
             log_probs = mx.array(lp)
         if min_length > 0 and cur_len < min_length:
-            lp = np.asarray(log_probs)
+            lp = np.array(log_probs)
             lp[:, eos_id] = -np.inf
             log_probs = mx.array(lp)
 
@@ -205,13 +208,13 @@ def beam_search(w: dict, prompt_embeds, cfg: dict, max_new_tokens: int,
         cur_len += 1
 
         # g. early-stop heuristic + loop condition
+        # transformers 5.17: worst over ALL finalized slots — unfinished slots
+        # carry -1e9, so the heuristic only kicks in once all B slots are
+        # finished (mirrors _check_early_stop_heuristic exactly).
         best_hypothetical_length = cur_len        # prompt_len == 0
         best_possible = running_beam_scores[0] \
             / (best_hypothetical_length ** length_penalty)
-        if is_sent_finished.any():
-            worst_finished = beam_scores[is_sent_finished].min()
-        else:
-            worst_finished = NEG
+        worst_finished = beam_scores.min() if is_sent_finished.any() else NEG
         early_stop_unsatisfied = early_stop_unsatisfied and \
             bool(best_possible > worst_finished)
         improvement_possible = early_stop_unsatisfied
@@ -247,6 +250,9 @@ def llm_transcribe(w_enc, w_llm, cfg, feats, feat_lengths, input_ids,
                                               n_layers=16)
     speech_features, speech_lens = adapter_forward(
         w_llm, enc_out, enc_lengths, ds=cfg.get("adapter_ds", 2))
+    if speech_features.shape[1] == 0:
+        # degenerate ultra-short audio (< ~80ms): no speech frames to merge
+        return [], 0.0
 
     emb_w = w_llm["model.embed_tokens.weight"]
     inputs_embeds = emb_w[input_ids.astype(mx.int32)]              # (1, U, D)

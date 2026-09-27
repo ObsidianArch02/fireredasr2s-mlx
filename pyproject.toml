@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "FireRedASR2S (VAD+LID+ASR+Punc) four-module ASR system, native Apple Silicon MLX port with byte-identical CLI parity to the official PyTorch build"
 requires-python = ">=3.12"
 dependencies = [
-    "mlx>=0.32",
+    # tests/test_llm_parity.py relies on mlx 0.32's "arrays are not pinned to
+    # the creation-time default device" semantics (cross-device ops just run
+    # on the current default device); pin the verified range.
+    "mlx>=0.32,<0.40",
     "safetensors",
     "numpy>=1.26,<2",
     "kaldiio",

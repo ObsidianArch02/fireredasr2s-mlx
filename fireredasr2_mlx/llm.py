@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -73,19 +74,23 @@ class FireRedAsr2LlmMlx:
         total_dur = sum(durs)
         t_start = time.time()
         for ui in range(feats_np.shape[0]):
-            feats = mx.array(np.asarray(feats_np[ui:ui + 1],
-                                        dtype=np.float32))
-            lengths = mx.array(np.asarray(lengths_np[ui:ui + 1],
-                                          dtype=np.int32))
-            ids, confidence = llm_transcribe(
-                self.w_enc, self.w_llm, self.cfg, feats, lengths,
-                self.input_ids, self.attention_mask,
-                beam_size=self.config.beam_size,
-                decode_max_len=self.config.decode_max_len,
-                decode_min_len=self.config.decode_min_len,
-                repetition_penalty=self.config.repetition_penalty,
-                llm_length_penalty=self.config.llm_length_penalty)
-            text = self.tokenizer.batch_decode([ids])[0]
+            try:
+                feats = mx.array(np.asarray(feats_np[ui:ui + 1],
+                                            dtype=np.float32))
+                lengths = mx.array(np.asarray(lengths_np[ui:ui + 1],
+                                              dtype=np.int32))
+                ids, confidence = llm_transcribe(
+                    self.w_enc, self.w_llm, self.cfg, feats, lengths,
+                    self.input_ids, self.attention_mask,
+                    beam_size=self.config.beam_size,
+                    decode_max_len=self.config.decode_max_len,
+                    decode_min_len=self.config.decode_min_len,
+                    repetition_penalty=self.config.repetition_penalty,
+                    llm_length_penalty=self.config.llm_length_penalty)
+                text = self.tokenizer.batch_decode([ids])[0]
+            except Exception:
+                traceback.print_exc()
+                ids, confidence, text = [], 0.0, ""
             results.append({"ids": ids, "confidence": confidence,
                             "_text": text})
         elapsed = time.time() - t_start

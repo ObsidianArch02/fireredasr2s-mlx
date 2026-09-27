@@ -96,6 +96,15 @@ checkpoint). Setup:
     'pretrained_models/FireRedASR2-LLM')"
 ```
 
+> Security note: `model.pth.tar` is a pickle file, so converting it can execute
+> arbitrary code (`weights_only=False` is required). Only convert checkpoints from
+> the trusted official FireRedTeam HuggingFace repo.
+> Memory note: the LLM variant needs ~35GB resident in fp32 (plus ~12GB peak for
+> checkpoint conversion/loading); use a machine with sufficient RAM. Keep VAD
+> on for long audio (`--enable_vad 1`, segmented decoding) - decoding several
+> minutes of audio in one shot would produce an oversized sequence because
+> `decode_max_len=0` (the cap equals the number of speech frames), same as upstream.
+
 Then run example 4. The LLM variant has no word-level timestamps
 (`--return_timestamp` is a no-op) and results carry an extra `confidence` field
 (mean per-token probability). On official benchmarks the LLM's average CER is
