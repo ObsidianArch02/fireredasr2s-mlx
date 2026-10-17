@@ -134,7 +134,9 @@ acceptance details and bounds are in [docs/PARITY_GAPS.md](docs/PARITY_GAPS.md).
 ## Differences from the official PyTorch CLI
 
 The full list of not-ported items and semantic differences is in
-[docs/PARITY_GAPS.md](docs/PARITY_GAPS.md). Key points: `--asr_type llm` (8B LLM
+[docs/PARITY_GAPS.md](docs/PARITY_GAPS.md). The purpose of each one-off
+development script and golden artifact is documented in
+[docs/DEVELOPMENT_PROCESS.md](docs/DEVELOPMENT_PROCESS.md). Key points: `--asr_type llm` (8B LLM
 variant) and external LM fusion (`--elm_dir`) are unsupported; Stream-VAD / mVAD /
 TensorRT / training code are out of scope; the four `*_use_gpu` flags and
 `--asr_use_half` are accepted as no-ops (MLX always runs Metal, always fp32).
